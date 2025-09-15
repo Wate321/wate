@@ -1,0 +1,69 @@
+name: Build OpenCore_NO_ACPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 'ARCHS'
+        required: true
+        default: 'X64'
+      target:
+        description: 'TARGETS'
+        required: true
+        default: 'RELEASE'
+      toolchain:
+        description: 'TOOLCHAINS'
+        required: true
+        default: 'CLANG'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout build runner repo
+        uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git build-essential uuid-dev iasl nasm python3-venv cmake ninja-build zip
+
+      - name: Clone OpenCore_NO_ACPI (mirror on Gitee → GitHub rewrite)
+        run: |
+          git config --global url."https://github.com/".insteadOf https://gitcode.net/
+          git config --global url."https://github.com/".insteadOf http://gitcode.net/
+          git clone --depth=1 https://gitee.com/btwise/OpenCore_NO_ACPI.git src || \
+          git clone --depth=1 https://github.com/btwise/OpenCore_NO_ACPI.git src || \
+          (echo "Mirror unavailable" && exit 1)
+
+      - name: Build (ARCHS=${{ github.event.inputs.arch }} TARGETS=${{ github.event.inputs.target }} TOOLCHAINS=${{ github.event.inputs.toolchain }})
+        working-directory: src
+        env:
+          ARCHS: ${{ github.event.inputs.arch }}
+          TARGETS: ${{ github.event.inputs.target }}
+          TOOLCHAINS: ${{ github.event.inputs.toolchain }}
+          GIT_TERMINAL_PROMPT: 0
+        run: |
+          # 兜底：把脚本里的 gitcode 链接替换成 GitHub
+          grep -R "gitcode.net\|codechina.csdn.net" -n . || true
+          files=$(grep -RIl "gitcode.net\|codechina.csdn.net" . || true)
+          if [ -n "$files" ]; then
+            sed -i 's#https\?://gitcode\.net/#https://github.com/#g' $files || true
+            sed -i 's#https\?://codechina\.csdn\.net/#https://github.com/#g' $files || true
+          fi
+          ARCHS=$ARCHS TARGETS=$TARGETS TOOLCHAINS=$TOOLCHAINS ./build_oc.tool
+
+      - name: Package EFI
+        working-directory: src
+        run: |
+          out=$(find Build -type d -name EFI | sort | tail -n1)
+          test -d "$out" || (echo "EFI not found" && exit 1)
+          mkdir -p artifact
+          cp -r "$out" artifact/EFI
+          (cd artifact && zip -qr "OpenCore_NO_ACPI_${{ github.event.inputs.arch }}_${{ github.event.inputs.target }}.zip" EFI)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenCore_NO_ACPI_${{ github.event.inputs.arch }}_${{ github.event.inputs.target }}
+          path: src/artifact/*.zip
