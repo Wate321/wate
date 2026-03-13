@@ -88,5 +88,5 @@ theme: landscape
 # Deployment
 deploy:
   type: git
-  repo: https://github.com/yourname/yourblog.git
+  repo: https://github.com/Wate321/wate.git
   branch: main
