@@ -1,0 +1,6 @@
+{
+  "build": {
+    "command": "npm install && npx hexo generate",
+    "outputDirectory": "public"
+  }
+}
